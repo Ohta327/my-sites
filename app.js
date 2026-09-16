@@ -13,6 +13,24 @@ function parseTags(v){return v.split(',').map(x=>x.trim()).filter(Boolean).filte
 async function refresh(){sites=await all();render()}
 function render(){let q=$('search').value.trim().toLowerCase(),c=$('categoryFilter').value,l=sites.filter(s=>!c||s.category===c);if(filter==='favorite')l=l.filter(s=>s.favorite);if(filter==='later')l=l.filter(s=>s.later);if(filter==='recent')l.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));if(q)l=l.filter(s=>[s.name,s.url,s.description,s.category,...(s.tags||[]),s.memo].join(' ').toLowerCase().includes(q));$('stats').textContent=`${l.length}件表示 / 登録 ${sites.length}件`;$('list').innerHTML=l.length?l.map(s=>`<article class="card"><div class="top"><img class="icon" src="${esc(s.icon||fav(s.url))}"><div style="min-width:0;flex:1"><h3>${esc(s.name)}</h3><div class="url">${esc(s.url)}</div></div><b>${s.favorite?'★':'☆'}</b></div>${s.description?`<div class="desc">${esc(s.description)}</div>`:''}<div class="badges"><span class="badge">${esc(s.category)}</span>${s.later?'<span class="badge">あとで試す</span>':''}${(s.tags||[]).map(t=>`<span class="badge">#${esc(t)}</span>`).join('')}</div><div class="actions"><button onclick="editSite('${esc(s.id)}')">編集</button><button class="open" onclick="openSite('${esc(s.id)}')">開く</button></div></article>`).join(''):'<div class="empty">まだサイトがありません。<br>「＋ 登録」またはSafariの共有から追加できます。</div>'}
 function editSite(id,sharedUrl='',sharedName=''){ $('modal').classList.remove('hidden');$('form').reset();$('id').value=id||'';$('delete').classList.toggle('hidden',!id);$('modalTitle').textContent=id?'サイトを編集':'サイトを登録';if(id){let s=sites.find(x=>x.id===id);$('url').value=s.url;$('name').value=s.name;$('desc').value=s.description||'';$('cat').value=s.category||'その他';$('tags').value=(s.tags||[]).join(', ');$('memo').value=s.memo||'';$('fav').checked=!!s.favorite;$('later').checked=!!s.later}else if(sharedUrl){$('url').value=sharedUrl;$('name').value=sharedName}}
+
+function receiveShare(){
+  const p=new URLSearchParams(location.search);
+  const url=p.get('url')||'';
+  const title=p.get('title')||'';
+  const text=p.get('text')||'';
+  if(!url && !title && !text)return;
+  let sharedUrl=url;
+  if(!sharedUrl){
+    const m=text.match(/https?:\/\/[^\s]+/);
+    if(m)sharedUrl=m[0];
+  }
+  if(sharedUrl){
+    try{sharedUrl=new URL(sharedUrl).href.replace(/\/$/,'')}catch{return}
+    editSite('',sharedUrl,title||sharedUrl);
+    history.replaceState({},'',location.pathname);
+  }
+}
 function openSite(id){let s=sites.find(x=>x.id===id);if(s){s.lastUsedAt=now();put(s);window.open(s.url,'_blank','noopener')}}
 $('addTop').onclick=()=>editSite();$('close').onclick=$('cancel').onclick=()=>{$('modal').classList.add('hidden')};$('search').oninput=render;$('categoryFilter').onchange=render;
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render()});
@@ -52,13 +70,5 @@ async function receiveChatGPTAdd(){
     alert(old?'サイト情報を更新しました。':'サイトを登録しました。');
   }catch(e){console.error(e);alert('ChatGPTから受け取った登録データを読み込めませんでした。');}
 }
-async function receiveShare(){
-  const p=new URLSearchParams(location.search);
-  const url=p.get('url'), title=p.get('title')||'', text=p.get('text')||'';
-  if(!url)return;
-  const name=title.trim()||text.split('\n')[0].trim()||'';
-  editSite('',url,name);
-  history.replaceState({},'',location.pathname);
-}
-openDB().then(async()=>{await refresh();await receiveShare();await receiveChatGPTAdd()})
-.catch((err)=>{console.error('IndexedDB initialization failed:',err);alert('このブラウザではIndexedDBを利用できません。');});
+openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()})
+.catch(e=>{console.error(e);alert('このブラウザではデータ保存機能を利用できません。Safariの通常モードで開いているか確認してください。');});
