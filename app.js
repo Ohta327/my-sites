@@ -38,8 +38,25 @@ $('delete').onclick=async()=>{let id=$('id').value;if(id&&confirm('このサイ�
 $('form').onsubmit=async e=>{e.preventDefault();let id=$('id').value||uid(),old=sites.find(s=>s.id===id),url=$('url').value.trim();try{url=new URL(url).href.replace(/\/$/,'')}catch{}if(sites.some(s=>s.id!==id&&s.url===url)){alert('同じURLのサイトがすでに登録されています。');return}await put({id,url,name:$('name').value.trim(),description:$('desc').value.trim(),category:$('cat').value,tags:parseTags($('tags').value),memo:$('memo').value.trim(),favorite:$('fav').checked,later:$('later').checked,icon:fav(url),createdAt:old?.createdAt||now(),updatedAt:now(),lastUsedAt:old?.lastUsedAt||null});$('modal').classList.add('hidden');await refresh()};
 async function share(mode){let last=mode==='changed'?await getMeta('lastSyncedAt'):null,l=mode==='changed'&&last?sites.filter(s=>s.updatedAt>last):sites,p={schemaVersion:1,exportedAt:now(),mode,sites:l},b=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),name=`my-sites-${mode}-${new Date().toISOString().slice(0,10)}.json`,shared=false;try{let f=new File([b],name,{type:'application/json'});if(navigator.share&&navigator.canShare?.({files:[f]})){await navigator.share({title:'My Sites',text:'My Sitesのサイトデータ',files:[f]});shared=true}}catch{}if(!shared){let a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);alert('JSONを保存しました。ChatGPTのチャットにこのファイルを添付してください。')}await setMeta('lastSyncedAt',now())}
 $('shareChanged').onclick=()=>share('changed');$('shareAll').onclick=()=>share('all');
+async function copyForChatGPT(mode='all'){
+  const last=mode==='changed'?await getMeta('lastSyncedAt'):null;
+  const l=mode==='changed'&&last?sites.filter(s=>s.updatedAt>last):sites;
+  const payload={schemaVersion:1,exportedAt:now(),mode,sites:l};
+  const text='My Sitesの登録データです。以下のデータだけを使って質問に答えてください。\n\n'+JSON.stringify(payload,null,2);
+  try{
+    await navigator.clipboard.writeText(text);
+    await setMeta('lastSyncedAt',now());
+    alert(`${l.length}件のデータをコピーしました。ChatGPTのチャットに貼り付けてください。`);
+  }catch(e){
+    const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');await setMeta('lastSyncedAt',now());alert(`${l.length}件のデータをコピーしました。ChatGPTのチャットに貼り付けてください。`)}catch{alert('コピーできませんでした。Safariのコピー許可を確認してください。')}
+    ta.remove();
+  }
+}
+$('copyAll').onclick=()=>copyForChatGPT('all');
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
 
+// v0.7: ChatGPT連携を強化。共有ファイルに加えて、ChatGPTへ貼り付けるデータをクリップボードへコピー可能。
 // v0.5: ChatGPT → My Sites registration link.
 // Payload is URL-safe base64 of a JSON site record. The app always asks for confirmation.
 function decodeAddPayload(raw){
