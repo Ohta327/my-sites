@@ -20,7 +20,7 @@ v0.3をベースに、Safariなどの共有メニューからURLを受け取っ�
 サイトデータはIndexedDBに端末内保存します。クラウドDBや課金APIは使用していません。
 
 
-## v0.5 ChatGPT連携
+## v0.5.1 ChatGPT連携
 ChatGPT側で作成したサイト情報を `?add=` URLでMy Sitesへ渡せます。
 My Sitesは起動時に登録内容を確認し、承認するとIndexedDBへ保存します。
 同じURLが登録済みなら、既存データを更新できます。

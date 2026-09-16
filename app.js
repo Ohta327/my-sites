@@ -22,6 +22,16 @@ async function share(mode){let last=mode==='changed'?await getMeta('lastSyncedAt
 $('shareChanged').onclick=()=>share('changed');$('shareAll').onclick=()=>share('all');
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
 
+// Safari / PWA share target: accept a URL shared from another app.
+function receiveShare(){
+  const p=new URLSearchParams(location.search);
+  const u=p.get('url');
+  if(!u)return;
+  const title=p.get('title')||p.get('text')||'';
+  history.replaceState({},'',location.pathname);
+  setTimeout(()=>editSite('',u,title),150);
+}
+
 // v0.5: ChatGPT → My Sites registration link.
 // Payload is URL-safe base64 of a JSON site record. The app always asks for confirmation.
 function decodeAddPayload(raw){
@@ -52,5 +62,14 @@ async function receiveChatGPTAdd(){
     alert(old?'サイト情報を更新しました。':'サイトを登録しました。');
   }catch(e){console.error(e);alert('ChatGPTから受け取った登録データを読み込めませんでした。');}
 }
-openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()})
-.catch(()=>alert('このブラウザではIndexedDBを利用できません。'));
+openDB().then(async()=>{
+  await refresh();
+  receiveShare();
+  await receiveChatGPTAdd();
+}).catch(err=>{
+  console.error('My Sites startup error:',err);
+  const msg=err?.name==='NotAllowedError' || err?.name==='SecurityError'
+    ? 'このブラウザではIndexedDBを利用できません。Safariのプライベートブラウズやサイトデータ設定を確認してください。'
+    : 'My Sitesのデータベースを開けませんでした。ページを再読み込みしてください。';
+  alert(msg);
+});
