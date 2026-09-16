@@ -54,8 +54,24 @@ async function copyForChatGPT(mode='all'){
   }
 }
 $('copyAll').onclick=()=>copyForChatGPT('all');
+async function copySearchPrompt(){
+  const payload={schemaVersion:1,exportedAt:now(),mode:'all',sites};
+  const text='My Sitesに登録されているサイトだけを使って、以下の質問に答えてください。\n\n【質問】\nここに質問を書いてください。\n\n【登録データ】\n'+JSON.stringify(payload,null,2);
+  try{
+    await navigator.clipboard.writeText(text);
+    alert('ChatGPT検索用のテンプレートをコピーしました。ChatGPTに貼り付けて、質問部分を書き換えてください。');
+  }catch(e){
+    const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');alert('ChatGPT検索用のテンプレートをコピーしました。ChatGPTに貼り付けてください。')}
+    catch{alert('コピーできませんでした。Safariのコピー許可を確認してください。')}
+    ta.remove();
+  }
+}
+$('copyPrompt').onclick=copySearchPrompt;
+
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
 
+// v0.8: ChatGPT検索用プロンプトを追加。
 // v0.7: ChatGPT連携を強化。共有ファイルに加えて、ChatGPTへ貼り付けるデータをクリップボードへコピー可能。
 // v0.5: ChatGPT → My Sites registration link.
 // Payload is URL-safe base64 of a JSON site record. The app always asks for confirmation.
