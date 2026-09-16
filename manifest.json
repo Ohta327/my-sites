@@ -1,0 +1,19 @@
+{
+  "name": "My Sites ― 便利サイト図鑑",
+  "short_name": "My Sites",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#111318",
+  "lang": "ja",
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
