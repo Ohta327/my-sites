@@ -21,6 +21,36 @@ $('form').onsubmit=async e=>{e.preventDefault();let id=$('id').value||uid(),old=
 async function share(mode){let last=mode==='changed'?await getMeta('lastSyncedAt'):null,l=mode==='changed'&&last?sites.filter(s=>s.updatedAt>last):sites,p={schemaVersion:1,exportedAt:now(),mode,sites:l},b=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),name=`my-sites-${mode}-${new Date().toISOString().slice(0,10)}.json`,shared=false;try{let f=new File([b],name,{type:'application/json'});if(navigator.share&&navigator.canShare?.({files:[f]})){await navigator.share({title:'My Sites',text:'My Sitesのサイトデータ',files:[f]});shared=true}}catch{}if(!shared){let a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);alert('JSONを保存しました。ChatGPTのチャットにこのファイルを添付してください。')}await setMeta('lastSyncedAt',now())}
 $('shareChanged').onclick=()=>share('changed');$('shareAll').onclick=()=>share('all');
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
-function receiveShare(){let p=new URLSearchParams(location.search),u=p.get('url'),title=p.get('title')||p.get('text')||'';if(u){history.replaceState({},'',location.pathname);setTimeout(()=>editSite('',u,title),250)}}
-openDB().then(async()=>{await refresh();receiveShare()})
+
+// v0.5: ChatGPT → My Sites registration link.
+// Payload is URL-safe base64 of a JSON site record. The app always asks for confirmation.
+function decodeAddPayload(raw){
+  const bin=atob(raw.replace(/-/g,'+').replace(/_/g,'/'));
+  const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+async function receiveChatGPTAdd(){
+  const p=new URLSearchParams(location.search),raw=p.get('add');
+  if(!raw)return;
+  try{
+    const incoming=decodeAddPayload(raw);
+    if(!incoming?.url||!incoming?.name)throw new Error('invalid payload');
+    let url=new URL(incoming.url).href.replace(/\/$/,'');
+    const duplicate=sites.find(s=>s.url===url);
+    const msg=(duplicate?'このサイトはすでに登録されています。情報を更新しますか？':'このサイトをMy Sitesに登録しますか？')+
+      `\n\nサイト名: ${incoming.name}\nURL: ${url}\nカテゴリ: ${incoming.category||'その他'}`;
+    if(!confirm(msg))return;
+    const old=duplicate,stamp=now();
+    await put({
+      id:old?.id||uid(),url,name:incoming.name.trim(),description:incoming.description||'',
+      category:incoming.category||'その他',tags:Array.isArray(incoming.tags)?incoming.tags:[],memo:incoming.memo||'',
+      favorite:!!incoming.favorite,later:!!incoming.later,icon:incoming.icon||fav(url),
+      createdAt:old?.createdAt||stamp,updatedAt:stamp,lastUsedAt:old?.lastUsedAt||null
+    });
+    history.replaceState({},'',location.pathname);
+    await refresh();
+    alert(old?'サイト情報を更新しました。':'サイトを登録しました。');
+  }catch(e){console.error(e);alert('ChatGPTから受け取った登録データを読み込めませんでした。');}
+}
+openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()})
 .catch(()=>alert('このブラウザではIndexedDBを利用できません。'));
