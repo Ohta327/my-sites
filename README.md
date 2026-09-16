@@ -26,3 +26,6 @@ My Sitesは起動時に登録内容を確認し、承認するとIndexedDBへ保
 同じURLが登録済みなら、既存データを更新できます。
 
 PayloadはUTF-8 JSONをURL-safe Base64化しています。
+
+
+v0.5.1では、Safari等のURL共有から登録フォームを開く処理を追加し、初期化処理のエラーも明示します。
