@@ -1,4 +1,4 @@
-# My Sites v0.9
+# My Sites v0.8
 
 v0.3をベースに、Safariなどの共有メニューからURLを受け取って登録画面へ渡す仕組み（Web Share Target）を追加しました。
 
@@ -39,8 +39,13 @@ PayloadはUTF-8 JSONをURL-safe Base64化しています。
 - データは引き続きブラウザ内のIndexedDBに保存されます。
 
 
-## v0.9
+## v0.8
 - 「ChatGPT検索用プロンプトをコピー」を追加しました。
 - My Sitesの全登録データと、質問を書き込むためのテンプレートを一度にコピーできます。
 - ChatGPT側では貼り付けた登録データだけを使って、カテゴリ・タグ・説明・メモなどから検索できます。
 - v0.7までのSafari共有、ChatGPTからの `?add=` 登録、JSON共有、IndexedDB保存は維持しています。
+
+
+## ChatGPTからMy Sitesへの登録（v1.0）
+My Sitesは `?add=` パラメータで登録データを受け取り、登録画面へ渡せます。
+ChatGPT側でURL・サイト名・説明などを含む登録データを生成し、その登録リンクを開くことで、My Sites側で確認して保存できます。

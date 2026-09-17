@@ -69,26 +69,9 @@ async function copySearchPrompt(){
 }
 $('copyPrompt').onclick=copySearchPrompt;
 
-async function chatSearch(){
-  const q=$('search').value.trim();
-  const payload={schemaVersion:1,exportedAt:now(),mode:'all',sites};
-  const text='My Sitesに登録されているサイトだけを使って、質問に答えてください。登録データにないサイトは推薦・補完しないでください。\n\n【質問】\n'+(q||'ここに質問を書いてください。')+'\n\n【登録データ】\n'+JSON.stringify(payload,null,2);
-  try{
-    await navigator.clipboard.writeText(text);
-    alert('ChatGPT用の検索内容をコピーしました。ChatGPTを開くので、そのまま貼り付けてください。');
-  }catch(e){
-    const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
-    try{document.execCommand('copy');alert('ChatGPT用の検索内容をコピーしました。ChatGPTを開くので、そのまま貼り付けてください。')}
-    catch{alert('コピーできませんでした。まず「ChatGPT検索用プロンプトをコピー」を使ってください。')}
-    ta.remove();
-  }
-  window.open('https://chatgpt.com/','_blank','noopener');
-}
-$('chatSearch').onclick=chatSearch;
-
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
 
-// v0.9: 「ChatGPTで検索」ボタンを追加。現在の検索語＋登録データをコピーし、ChatGPTを開く。
+// v0.8: ChatGPT検索用プロンプトを追加。
 // v0.7: ChatGPT連携を強化。共有ファイルに加えて、ChatGPTへ貼り付けるデータをクリップボードへコピー可能。
 // v0.5: ChatGPT → My Sites registration link.
 // Payload is URL-safe base64 of a JSON site record. The app always asks for confirmation.
@@ -122,3 +105,124 @@ async function receiveChatGPTAdd(){
 }
 openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()})
 .catch(e=>{console.error(e);alert('このブラウザではデータ保存機能を利用できません。Safariの通常モードで開いているか確認してください。');});
+
+
+
+/* v1.0: ChatGPT -> My Sites registration
+   Accepts:
+   ?add=<base64url(JSON)>
+   or ?add=<URL-encoded JSON>
+   or ?url=...&title=...&text=...
+*/
+(function () {
+  const BASE = location.href.split("?")[0].split("#")[0];
+
+  function decodeAdd(value) {
+    if (!value) return null;
+    try {
+      // base64url(JSON)
+      let s = value.replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0));
+      const json = new TextDecoder().decode(bytes);
+      return JSON.parse(json);
+    } catch (e) {}
+    try {
+      return JSON.parse(decodeURIComponent(value));
+    } catch (e) {}
+    return null;
+  }
+
+  function esc(v) {
+    return String(v ?? "").replace(/[&<>"']/g, ch => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[ch]));
+  }
+
+  function normalizeIncoming(raw) {
+    const x = raw || {};
+    const url = String(x.url || x.href || "").trim();
+    const title = String(x.title || x.name || "").trim();
+    const description = String(x.description || x.desc || x.text || "").trim();
+    return {
+      url,
+      name: title || url,
+      description,
+      category: String(x.category || "その他"),
+      tags: Array.isArray(x.tags) ? x.tags.map(String) : [],
+      memo: String(x.memo || "")
+    };
+  }
+
+  async function openRegistration(incoming) {
+    const d = normalizeIncoming(incoming);
+    if (!d.url) {
+      alert("登録するサイトのURLがありません。");
+      return;
+    }
+
+    // Prefer an existing app registration form if present.
+    const urlInput = document.querySelector('input[name="url"], #url, #siteUrl');
+    const nameInput = document.querySelector('input[name="name"], #name, #siteName, input[name="title"]');
+    const descInput = document.querySelector('textarea[name="description"], textarea[name="desc"], #description, #siteDescription');
+    const categoryInput = document.querySelector('select[name="category"], #category, select[name="siteCategory"]');
+    const tagsInput = document.querySelector('input[name="tags"], #tags, input[name="siteTags"]');
+    const memoInput = document.querySelector('textarea[name="memo"], #memo');
+
+    if (urlInput) {
+      urlInput.value = d.url;
+      urlInput.dispatchEvent(new Event("input", {bubbles:true}));
+      if (nameInput) { nameInput.value=d.name; nameInput.dispatchEvent(new Event("input",{bubbles:true})); }
+      if (descInput) { descInput.value=d.description; descInput.dispatchEvent(new Event("input",{bubbles:true})); }
+      if (categoryInput) { categoryInput.value=d.category; categoryInput.dispatchEvent(new Event("change",{bubbles:true})); }
+      if (tagsInput) { tagsInput.value=d.tags.join(", "); tagsInput.dispatchEvent(new Event("input",{bubbles:true})); }
+      if (memoInput) { memoInput.value=d.memo; memoInput.dispatchEvent(new Event("input",{bubbles:true})); }
+      window.scrollTo({top:0,behavior:"smooth"});
+      return;
+    }
+
+    // Fallback: dispatch a custom event that an existing form can listen for.
+    window.dispatchEvent(new CustomEvent("mysites:register-from-chatgpt", {detail:d}));
+    alert("ChatGPTからの登録データを受け取りました。登録フォームが見つからないため、画面の登録欄をご確認ください。");
+  }
+
+  function readIncoming() {
+    const p = new URLSearchParams(location.search);
+    const add = p.get("add");
+    if (add) return decodeAdd(add);
+
+    const url = p.get("url");
+    if (url) return {
+      url,
+      title: p.get("title") || "",
+      text: p.get("text") || ""
+    };
+    return null;
+  }
+
+  async function init() {
+    const incoming = readIncoming();
+    if (incoming) {
+      // Give the app a moment to render its registration UI.
+      setTimeout(() => openRegistration(incoming), 250);
+    }
+
+    const btn = document.getElementById("chatgptRegisterBtn");
+    if (btn) {
+      btn.addEventListener("click", () => {
+        const p = new URLSearchParams(location.search);
+        const incoming = p.get("add") ? decodeAdd(p.get("add")) : (p.get("url") ? {
+          url:p.get("url"), title:p.get("title")||"", text:p.get("text")||""
+        } : null);
+        if (incoming) openRegistration(incoming);
+        else alert("ChatGPTから受け取った登録データがありません。");
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
