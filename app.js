@@ -110,158 +110,140 @@ openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()
 
 
 
-/* v1.1: ChatGPT -> My Sites robust registration flow
-   - Accepts ?add=<base64url(JSON)> or URL-encoded JSON.
-   - Persists the incoming payload in localStorage before rendering.
-   - Reopens the registration form after navigation/reload.
-   - Dispatches a custom event for the existing app.
-   - Uses the same origin/storage context as the installed PWA when launched there.
-*/
-(function () {
-  const PENDING_KEY = "mysites_pending_chatgpt_registration_v1";
-  const qs = new URLSearchParams(location.search);
 
-  function decodeAdd(value) {
-    if (!value) return null;
+
+/* v1.2 ChatGPT -> My Sites inbox / PWA handoff */
+(function () {
+  const KEY = "mysites_chatgpt_inbox_v12";
+
+  function b64decode(value) {
     try {
-      let s = value.replace(/-/g, "+").replace(/_/g, "/");
+      let s = String(value).replace(/-/g, "+").replace(/_/g, "/");
       while (s.length % 4) s += "=";
       const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0));
       return JSON.parse(new TextDecoder().decode(bytes));
-    } catch (e) {}
-    try {
-      return JSON.parse(decodeURIComponent(value));
-    } catch (e) {}
-    return null;
-  }
-
-  function getIncoming() {
-    const add = qs.get("add");
-    if (add) return decodeAdd(add);
-    const url = qs.get("url");
-    if (url) {
-      return {
-        url: url,
-        name: qs.get("title") || "",
-        description: qs.get("text") || "",
-        category: qs.get("category") || "その他",
-        tags: qs.get("tags") ? qs.get("tags").split(",").map(s => s.trim()).filter(Boolean) : [],
-        memo: qs.get("memo") || ""
-      };
+    } catch (e) {
+      try { return JSON.parse(decodeURIComponent(value)); } catch (_) { return null; }
     }
-    return null;
   }
 
   function normalize(x) {
-    x = x || {};
+    x=x||{};
     return {
-      url: String(x.url || x.href || "").trim(),
-      name: String(x.name || x.title || x.siteName || "").trim(),
-      description: String(x.description || x.desc || x.text || "").trim(),
-      category: String(x.category || "その他").trim(),
-      tags: Array.isArray(x.tags) ? x.tags.map(String) : [],
-      memo: String(x.memo || "").trim()
+      url:String(x.url||x.href||"").trim(),
+      name:String(x.name||x.title||"").trim(),
+      description:String(x.description||x.desc||x.text||"").trim(),
+      category:String(x.category||"その他").trim(),
+      tags:Array.isArray(x.tags)?x.tags.map(String):[],
+      memo:String(x.memo||"").trim()
     };
   }
 
-  function savePending(data) {
-    try {
-      localStorage.setItem(PENDING_KEY, JSON.stringify({
-        ...normalize(data),
-        receivedAt: new Date().toISOString()
-      }));
-      return true;
-    } catch (e) {
-      return false;
-    }
+  function getIncoming() {
+    const p=new URLSearchParams(location.search);
+    const raw=p.get("pwaAdd") || p.get("add");
+    if(raw) return normalize(b64decode(raw));
+    const url=p.get("url");
+    if(url) return normalize({
+      url:url, name:p.get("title")||"", description:p.get("text")||"",
+      category:p.get("category")||"その他",
+      tags:(p.get("tags")||"").split(",").map(s=>s.trim()).filter(Boolean),
+      memo:p.get("memo")||""
+    });
+    return null;
   }
 
-  function readPending() {
-    try {
-      const s = localStorage.getItem(PENDING_KEY);
-      return s ? JSON.parse(s) : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function clearPending() {
-    try { localStorage.removeItem(PENDING_KEY); } catch (e) {}
-  }
-
-  function fire(data) {
-    window.dispatchEvent(new CustomEvent("mysites:register-from-chatgpt", {
-      detail: normalize(data)
+  function saveInbox(data) {
+    if(!data || !data.url) return false;
+    localStorage.setItem(KEY, JSON.stringify({
+      ...data, receivedAt:new Date().toISOString()
     }));
-  }
-
-  function fillKnownForm(data) {
-    const d = normalize(data);
-    const selectors = {
-      url: 'input[name="url"], #url, #siteUrl',
-      name: 'input[name="name"], #name, #siteName, input[name="title"]',
-      description: 'textarea[name="description"], textarea[name="desc"], #description, #siteDescription',
-      category: 'select[name="category"], #category, select[name="siteCategory"]',
-      tags: 'input[name="tags"], #tags, input[name="siteTags"]',
-      memo: 'textarea[name="memo"], #memo'
-    };
-    const el = {};
-    for (const k in selectors) el[k] = document.querySelector(selectors[k]);
-
-    if (!el.url) return false;
-
-    el.url.value = d.url;
-    el.url.dispatchEvent(new Event("input", {bubbles:true}));
-    if (el.name) { el.name.value=d.name || d.url; el.name.dispatchEvent(new Event("input",{bubbles:true})); }
-    if (el.description) { el.description.value=d.description; el.description.dispatchEvent(new Event("input",{bubbles:true})); }
-    if (el.category) { el.category.value=d.category; el.category.dispatchEvent(new Event("change",{bubbles:true})); }
-    if (el.tags) { el.tags.value=d.tags.join(", "); el.tags.dispatchEvent(new Event("input",{bubbles:true})); }
-    if (el.memo) { el.memo.value=d.memo; el.memo.dispatchEvent(new Event("input",{bubbles:true})); }
-    window.scrollTo({top:0, behavior:"smooth"});
     return true;
   }
 
-  function present(data) {
-    if (!data || !data.url) return;
-    savePending(data);
-
-    // Existing app code may handle this event and open its own form.
-    fire(data);
-
-    // Also try to fill a conventional form. Repeat because the app may render asynchronously.
-    let tries = 0;
-    const timer = setInterval(() => {
-      tries++;
-      if (fillKnownForm(data) || tries >= 12) clearInterval(timer);
-    }, 150);
+  function readInbox() {
+    try { return JSON.parse(localStorage.getItem(KEY)||"null"); } catch(e){ return null; }
   }
 
-  function boot() {
-    const incoming = getIncoming();
-    if (incoming && incoming.url) {
-      present(incoming);
-      return;
+  function clearInbox() {
+    localStorage.removeItem(KEY);
+    const panel=document.getElementById("chatgptInboxPanel");
+    if(panel) panel.style.display="none";
+  }
+
+  function showInbox(data) {
+    if(!data || !data.url) return;
+    saveInbox(data);
+    const panel=document.getElementById("chatgptInboxPanel");
+    const text=document.getElementById("chatgptInboxText");
+    if(panel && text) {
+      text.innerHTML =
+        "<strong>"+escapeHtml(data.name||data.url)+"</strong><br>"+
+        escapeHtml(data.url)+"<br>"+
+        escapeHtml(data.description||"");
+      panel.style.display="block";
     }
-    const pending = readPending();
-    if (pending && pending.url) {
-      // Only keep the pending record until the app has had a chance to receive it.
-      setTimeout(() => {
-        fire(pending);
-        fillKnownForm(pending);
-      }, 250);
+    window.dispatchEvent(new CustomEvent("mysites:chatgpt-inbox", {detail:data}));
+  }
+
+  function escapeHtml(s) {
+    return String(s||"").replace(/[&<>"']/g, ch => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[ch]));
+  }
+
+  function openRegistration(data) {
+    data=normalize(data);
+    // Tell the existing application about the registration request.
+    window.dispatchEvent(new CustomEvent("mysites:register-from-chatgpt", {detail:data}));
+
+    // Fill common registration form controls if they exist.
+    const q={
+      url:'input[name="url"],#url,#siteUrl',
+      name:'input[name="name"],#name,#siteName,input[name="title"]',
+      desc:'textarea[name="description"],textarea[name="desc"],#description,#siteDescription',
+      category:'select[name="category"],#category,select[name="siteCategory"]',
+      tags:'input[name="tags"],#tags,input[name="siteTags"]',
+      memo:'textarea[name="memo"],#memo'
+    };
+    const e={};
+    for(const k in q) e[k]=document.querySelector(q[k]);
+    if(e.url){
+      e.url.value=data.url;
+      e.url.dispatchEvent(new Event("input",{bubbles:true}));
+      if(e.name){e.name.value=data.name||data.url;e.name.dispatchEvent(new Event("input",{bubbles:true}));}
+      if(e.desc){e.desc.value=data.description;e.desc.dispatchEvent(new Event("input",{bubbles:true}));}
+      if(e.category){e.category.value=data.category;e.category.dispatchEvent(new Event("change",{bubbles:true}));}
+      if(e.tags){e.tags.value=data.tags.join(", ");e.tags.dispatchEvent(new Event("input",{bubbles:true}));}
+      if(e.memo){e.memo.value=data.memo;e.memo.dispatchEvent(new Event("input",{bubbles:true}));}
+      window.scrollTo({top:0,behavior:"smooth"});
     }
   }
 
-  // Public helper for future ChatGPT registration links.
-  window.MySitesChatGPT = {
-    receiveRegistration: present,
-    getPendingRegistration: readPending,
-    clearPendingRegistration: clearPending
+  function bootInbox() {
+    const incoming=getIncoming();
+    if(incoming && incoming.url) showInbox(incoming);
+    else {
+      const pending=readInbox();
+      if(pending && pending.url) showInbox(pending);
+    }
+
+    const openBtn=document.getElementById("chatgptInboxOpen");
+    const clearBtn=document.getElementById("chatgptInboxClear");
+    if(openBtn) openBtn.addEventListener("click",()=>{
+      const d=readInbox();
+      if(d) openRegistration(d);
+    });
+    if(clearBtn) clearBtn.addEventListener("click",clearInbox);
+  }
+
+  window.MySitesChatGPT={
+    receive:showInbox,
+    openRegistration:openRegistration,
+    getPending:readInbox,
+    clear:clearInbox
   };
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",bootInbox);
+  else bootInbox();
 })();

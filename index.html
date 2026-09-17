@@ -9,7 +9,7 @@
 <title>My Sites</title>
 </head>
 <body>
-<header><div><h1>My Sites</h1><p>便利サイト図鑑 v0.8</p></div><button id="addTop" class="primary">＋ 登録</button></header>
+<header><div><h1>My Sites</h1><p>便利サイト図鑑 v1.2</p></div><button id="addTop" class="primary">＋ 登録</button></header>
 <main>
   <input id="search" type="search" placeholder="サイト名・URL・タグ・メモを検索">
   <select id="categoryFilter"><option value="">すべてのカテゴリ</option><option>AI / 生成AI</option><option>画像</option><option>動画</option><option>音楽</option><option>学習</option><option>ニュース</option><option>開発</option><option>ツール</option><option>その他</option></select>
@@ -37,6 +37,14 @@
   <p style="margin:6px 0 0;font-size:13px;opacity:.8;">
     ChatGPTから開いた登録リンクの情報を、このMy Sitesアプリで登録できます。
   </p>
+</section>
+
+
+<section id="chatgptInboxPanel" style="display:none;margin-top:16px;padding:16px;border-radius:16px;background:#eef3ff;border:1px solid #cfdcff;">
+  <h3 style="margin:0 0 8px;">🤖 ChatGPTからの登録依頼</h3>
+  <div id="chatgptInboxText" style="margin-bottom:10px;"></div>
+  <button id="chatgptInboxOpen" type="button">登録画面を開く</button>
+  <button id="chatgptInboxClear" type="button" style="margin-left:8px;">閉じる</button>
 </section>
 
 </main>
