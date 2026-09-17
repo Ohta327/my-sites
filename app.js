@@ -69,9 +69,26 @@ async function copySearchPrompt(){
 }
 $('copyPrompt').onclick=copySearchPrompt;
 
+async function chatSearch(){
+  const q=$('search').value.trim();
+  const payload={schemaVersion:1,exportedAt:now(),mode:'all',sites};
+  const text='My Sitesに登録されているサイトだけを使って、質問に答えてください。登録データにないサイトは推薦・補完しないでください。\n\n【質問】\n'+(q||'ここに質問を書いてください。')+'\n\n【登録データ】\n'+JSON.stringify(payload,null,2);
+  try{
+    await navigator.clipboard.writeText(text);
+    alert('ChatGPT用の検索内容をコピーしました。ChatGPTを開くので、そのまま貼り付けてください。');
+  }catch(e){
+    const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');alert('ChatGPT用の検索内容をコピーしました。ChatGPTを開くので、そのまま貼り付けてください。')}
+    catch{alert('コピーできませんでした。まず「ChatGPT検索用プロンプトをコピー」を使ってください。')}
+    ta.remove();
+  }
+  window.open('https://chatgpt.com/','_blank','noopener');
+}
+$('chatSearch').onclick=chatSearch;
+
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
 
-// v0.8: ChatGPT検索用プロンプトを追加。
+// v0.9: 「ChatGPTで検索」ボタンを追加。現在の検索語＋登録データをコピーし、ChatGPTを開く。
 // v0.7: ChatGPT連携を強化。共有ファイルに加えて、ChatGPTへ貼り付けるデータをクリップボードへコピー可能。
 // v0.5: ChatGPT → My Sites registration link.
 // Payload is URL-safe base64 of a JSON site record. The app always asks for confirmation.
