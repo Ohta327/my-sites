@@ -69,6 +69,58 @@ async function copySearchPrompt(){
 }
 $('copyPrompt').onclick=copySearchPrompt;
 
+
+/* v1.3: reliable PWA-side ChatGPT registration code import.
+   The important rule: the installed PWA itself performs the IndexedDB write.
+   This avoids relying on Safari storage being the same as the Home Screen PWA. */
+function decodeRegistrationCode(raw){
+  raw=String(raw||'').trim();
+  // Accept either raw base64url or a full URL containing ?add= / ?pwaAdd=.
+  try{
+    if(/^https?:\/\//i.test(raw)){
+      const u=new URL(raw);
+      raw=u.searchParams.get('pwaAdd')||u.searchParams.get('add')||'';
+    }
+  }catch{}
+  if(!raw)throw new Error('コードが空です');
+  raw=raw.replace(/^MYSITES1:/,'').trim();
+  let s=raw.replace(/-/g,'+').replace(/_/g,'/');
+  while(s.length%4)s+='=';
+  const bin=atob(s);
+  const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  const data=JSON.parse(new TextDecoder().decode(bytes));
+  if(!data?.url || !data?.name)throw new Error('URLまたはサイト名がありません');
+  return data;
+}
+async function importChatGPTCode(){
+  const raw=$('chatgptPasteInput').value.trim();
+  try{
+    const incoming=decodeRegistrationCode(raw);
+    const url=new URL(incoming.url).href.replace(/\/$/,'');
+    const duplicate=sites.find(s=>s.url===url);
+    const msg=(duplicate?'このサイトはすでに登録されています。情報を更新しますか？':'このサイトをMy Sitesに登録しますか？')+
+      `\n\nサイト名: ${incoming.name}\nURL: ${url}\nカテゴリ: ${incoming.category||'その他'}`;
+    if(!confirm(msg))return;
+    const old=duplicate,stamp=now();
+    await put({
+      id:old?.id||uid(),url,name:String(incoming.name).trim(),description:incoming.description||'',
+      category:incoming.category||'その他',tags:Array.isArray(incoming.tags)?incoming.tags:[],memo:incoming.memo||'',
+      favorite:!!incoming.favorite,later:!!incoming.later,icon:incoming.icon||fav(url),
+      createdAt:old?.createdAt||stamp,updatedAt:stamp,lastUsedAt:old?.lastUsedAt||null
+    });
+    $('chatgptPasteModal').classList.add('hidden');
+    $('chatgptPasteInput').value='';
+    await refresh();
+    alert(old?'サイト情報を更新しました。':'サイトを登録しました。');
+  }catch(e){
+    console.error(e);
+    alert('登録コードを読み込めませんでした。ChatGPTからコードをもう一度コピーしてください。');
+  }
+}
+$('chatgptPasteBtn').onclick=()=>{$('chatgptPasteModal').classList.remove('hidden');$('chatgptPasteInput').focus()};
+$('chatgptPasteClose').onclick=$('chatgptPasteCancel').onclick=()=>{$('chatgptPasteModal').classList.add('hidden')};
+$('chatgptPasteSave').onclick=importChatGPTCode;
+
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
 
 // v0.8: ChatGPT検索用プロンプトを追加。
@@ -112,138 +164,3 @@ openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()
 
 
 
-/* v1.2 ChatGPT -> My Sites inbox / PWA handoff */
-(function () {
-  const KEY = "mysites_chatgpt_inbox_v12";
-
-  function b64decode(value) {
-    try {
-      let s = String(value).replace(/-/g, "+").replace(/_/g, "/");
-      while (s.length % 4) s += "=";
-      const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0));
-      return JSON.parse(new TextDecoder().decode(bytes));
-    } catch (e) {
-      try { return JSON.parse(decodeURIComponent(value)); } catch (_) { return null; }
-    }
-  }
-
-  function normalize(x) {
-    x=x||{};
-    return {
-      url:String(x.url||x.href||"").trim(),
-      name:String(x.name||x.title||"").trim(),
-      description:String(x.description||x.desc||x.text||"").trim(),
-      category:String(x.category||"その他").trim(),
-      tags:Array.isArray(x.tags)?x.tags.map(String):[],
-      memo:String(x.memo||"").trim()
-    };
-  }
-
-  function getIncoming() {
-    const p=new URLSearchParams(location.search);
-    const raw=p.get("pwaAdd") || p.get("add");
-    if(raw) return normalize(b64decode(raw));
-    const url=p.get("url");
-    if(url) return normalize({
-      url:url, name:p.get("title")||"", description:p.get("text")||"",
-      category:p.get("category")||"その他",
-      tags:(p.get("tags")||"").split(",").map(s=>s.trim()).filter(Boolean),
-      memo:p.get("memo")||""
-    });
-    return null;
-  }
-
-  function saveInbox(data) {
-    if(!data || !data.url) return false;
-    localStorage.setItem(KEY, JSON.stringify({
-      ...data, receivedAt:new Date().toISOString()
-    }));
-    return true;
-  }
-
-  function readInbox() {
-    try { return JSON.parse(localStorage.getItem(KEY)||"null"); } catch(e){ return null; }
-  }
-
-  function clearInbox() {
-    localStorage.removeItem(KEY);
-    const panel=document.getElementById("chatgptInboxPanel");
-    if(panel) panel.style.display="none";
-  }
-
-  function showInbox(data) {
-    if(!data || !data.url) return;
-    saveInbox(data);
-    const panel=document.getElementById("chatgptInboxPanel");
-    const text=document.getElementById("chatgptInboxText");
-    if(panel && text) {
-      text.innerHTML =
-        "<strong>"+escapeHtml(data.name||data.url)+"</strong><br>"+
-        escapeHtml(data.url)+"<br>"+
-        escapeHtml(data.description||"");
-      panel.style.display="block";
-    }
-    window.dispatchEvent(new CustomEvent("mysites:chatgpt-inbox", {detail:data}));
-  }
-
-  function escapeHtml(s) {
-    return String(s||"").replace(/[&<>"']/g, ch => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[ch]));
-  }
-
-  function openRegistration(data) {
-    data=normalize(data);
-    // Tell the existing application about the registration request.
-    window.dispatchEvent(new CustomEvent("mysites:register-from-chatgpt", {detail:data}));
-
-    // Fill common registration form controls if they exist.
-    const q={
-      url:'input[name="url"],#url,#siteUrl',
-      name:'input[name="name"],#name,#siteName,input[name="title"]',
-      desc:'textarea[name="description"],textarea[name="desc"],#description,#siteDescription',
-      category:'select[name="category"],#category,select[name="siteCategory"]',
-      tags:'input[name="tags"],#tags,input[name="siteTags"]',
-      memo:'textarea[name="memo"],#memo'
-    };
-    const e={};
-    for(const k in q) e[k]=document.querySelector(q[k]);
-    if(e.url){
-      e.url.value=data.url;
-      e.url.dispatchEvent(new Event("input",{bubbles:true}));
-      if(e.name){e.name.value=data.name||data.url;e.name.dispatchEvent(new Event("input",{bubbles:true}));}
-      if(e.desc){e.desc.value=data.description;e.desc.dispatchEvent(new Event("input",{bubbles:true}));}
-      if(e.category){e.category.value=data.category;e.category.dispatchEvent(new Event("change",{bubbles:true}));}
-      if(e.tags){e.tags.value=data.tags.join(", ");e.tags.dispatchEvent(new Event("input",{bubbles:true}));}
-      if(e.memo){e.memo.value=data.memo;e.memo.dispatchEvent(new Event("input",{bubbles:true}));}
-      window.scrollTo({top:0,behavior:"smooth"});
-    }
-  }
-
-  function bootInbox() {
-    const incoming=getIncoming();
-    if(incoming && incoming.url) showInbox(incoming);
-    else {
-      const pending=readInbox();
-      if(pending && pending.url) showInbox(pending);
-    }
-
-    const openBtn=document.getElementById("chatgptInboxOpen");
-    const clearBtn=document.getElementById("chatgptInboxClear");
-    if(openBtn) openBtn.addEventListener("click",()=>{
-      const d=readInbox();
-      if(d) openRegistration(d);
-    });
-    if(clearBtn) clearBtn.addEventListener("click",clearInbox);
-  }
-
-  window.MySitesChatGPT={
-    receive:showInbox,
-    openRegistration:openRegistration,
-    getPending:readInbox,
-    clear:clearInbox
-  };
-
-  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",bootInbox);
-  else bootInbox();
-})();

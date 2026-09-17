@@ -9,7 +9,7 @@
 <title>My Sites</title>
 </head>
 <body>
-<header><div><h1>My Sites</h1><p>便利サイト図鑑 v1.2</p></div><button id="addTop" class="primary">＋ 登録</button></header>
+<header><div><h1>My Sites</h1><p>便利サイト図鑑 v1.3</p></div><button id="addTop" class="primary">＋ 登録</button></header>
 <main>
   <input id="search" type="search" placeholder="サイト名・URL・タグ・メモを検索">
   <select id="categoryFilter"><option value="">すべてのカテゴリ</option><option>AI / 生成AI</option><option>画像</option><option>動画</option><option>音楽</option><option>学習</option><option>ニュース</option><option>開発</option><option>ツール</option><option>その他</option></select>
@@ -24,29 +24,18 @@
     <label>↓ JSONから復元<input id="importFile" type="file" accept=".json,application/json"></label>
   </aside>
 
-<section class="chatgpt-register-panel" style="margin-top:16px;">
-  <button id="chatgptRegisterBtn" type="button">🤖 ChatGPTから登録</button>
-  <p style="margin:6px 0 0;font-size:13px;opacity:.8;">
-    ChatGPTから受け取った登録データがURLに入っている場合、登録内容を確認して保存できます。
-  </p>
-</section>
+
+
+
+
 
 
 <section class="chatgpt-register-panel" style="margin-top:16px;">
-  <button id="chatgptReceiveBtn" type="button">🤖 ChatGPTから登録データを受け取る</button>
+  <button id="chatgptPasteBtn" type="button">🤖 ChatGPTから登録</button>
   <p style="margin:6px 0 0;font-size:13px;opacity:.8;">
-    ChatGPTから開いた登録リンクの情報を、このMy Sitesアプリで登録できます。
+    ChatGPTが作った「登録コード」をここに貼り付けて、ホーム画面のMy Sitesへ直接登録できます。
   </p>
 </section>
-
-
-<section id="chatgptInboxPanel" style="display:none;margin-top:16px;padding:16px;border-radius:16px;background:#eef3ff;border:1px solid #cfdcff;">
-  <h3 style="margin:0 0 8px;">🤖 ChatGPTからの登録依頼</h3>
-  <div id="chatgptInboxText" style="margin-bottom:10px;"></div>
-  <button id="chatgptInboxOpen" type="button">登録画面を開く</button>
-  <button id="chatgptInboxClear" type="button" style="margin-left:8px;">閉じる</button>
-</section>
-
 </main>
 
 <div id="modal" class="hidden"><div class="box">
@@ -62,6 +51,13 @@
     <div><label><input id="fav" type="checkbox"> ★ お気に入り</label><label><input id="later" type="checkbox"> あとで試す</label></div>
     <footer><button type="button" id="delete" class="danger hidden">削除</button><span></span><button type="button" id="cancel">キャンセル</button><button class="primary">保存</button></footer>
   </form>
+</div></div>
+
+<div id="chatgptPasteModal" class="hidden"><div class="box">
+  <div class="head"><h2>🤖 ChatGPTから登録</h2><button id="chatgptPasteClose" type="button">×</button></div>
+  <p>ChatGPTから受け取った登録コードを貼り付けてください。</p>
+  <textarea id="chatgptPasteInput" rows="6" placeholder="ChatGPTの登録コードを貼り付け"></textarea>
+  <footer><span></span><button id="chatgptPasteCancel" type="button">キャンセル</button><button id="chatgptPasteSave" class="primary" type="button">登録</button></footer>
 </div></div>
 <script src="app.js"></script>
 </body></html>
