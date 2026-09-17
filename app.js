@@ -108,24 +108,26 @@ openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()
 
 
 
-/* v1.0: ChatGPT -> My Sites registration
-   Accepts:
-   ?add=<base64url(JSON)>
-   or ?add=<URL-encoded JSON>
-   or ?url=...&title=...&text=...
+
+
+/* v1.1: ChatGPT -> My Sites robust registration flow
+   - Accepts ?add=<base64url(JSON)> or URL-encoded JSON.
+   - Persists the incoming payload in localStorage before rendering.
+   - Reopens the registration form after navigation/reload.
+   - Dispatches a custom event for the existing app.
+   - Uses the same origin/storage context as the installed PWA when launched there.
 */
 (function () {
-  const BASE = location.href.split("?")[0].split("#")[0];
+  const PENDING_KEY = "mysites_pending_chatgpt_registration_v1";
+  const qs = new URLSearchParams(location.search);
 
   function decodeAdd(value) {
     if (!value) return null;
     try {
-      // base64url(JSON)
       let s = value.replace(/-/g, "+").replace(/_/g, "/");
       while (s.length % 4) s += "=";
       const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0));
-      const json = new TextDecoder().decode(bytes);
-      return JSON.parse(json);
+      return JSON.parse(new TextDecoder().decode(bytes));
     } catch (e) {}
     try {
       return JSON.parse(decodeURIComponent(value));
@@ -133,96 +135,133 @@ openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()
     return null;
   }
 
-  function esc(v) {
-    return String(v ?? "").replace(/[&<>"']/g, ch => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[ch]));
-  }
-
-  function normalizeIncoming(raw) {
-    const x = raw || {};
-    const url = String(x.url || x.href || "").trim();
-    const title = String(x.title || x.name || "").trim();
-    const description = String(x.description || x.desc || x.text || "").trim();
-    return {
-      url,
-      name: title || url,
-      description,
-      category: String(x.category || "その他"),
-      tags: Array.isArray(x.tags) ? x.tags.map(String) : [],
-      memo: String(x.memo || "")
-    };
-  }
-
-  async function openRegistration(incoming) {
-    const d = normalizeIncoming(incoming);
-    if (!d.url) {
-      alert("登録するサイトのURLがありません。");
-      return;
-    }
-
-    // Prefer an existing app registration form if present.
-    const urlInput = document.querySelector('input[name="url"], #url, #siteUrl');
-    const nameInput = document.querySelector('input[name="name"], #name, #siteName, input[name="title"]');
-    const descInput = document.querySelector('textarea[name="description"], textarea[name="desc"], #description, #siteDescription');
-    const categoryInput = document.querySelector('select[name="category"], #category, select[name="siteCategory"]');
-    const tagsInput = document.querySelector('input[name="tags"], #tags, input[name="siteTags"]');
-    const memoInput = document.querySelector('textarea[name="memo"], #memo');
-
-    if (urlInput) {
-      urlInput.value = d.url;
-      urlInput.dispatchEvent(new Event("input", {bubbles:true}));
-      if (nameInput) { nameInput.value=d.name; nameInput.dispatchEvent(new Event("input",{bubbles:true})); }
-      if (descInput) { descInput.value=d.description; descInput.dispatchEvent(new Event("input",{bubbles:true})); }
-      if (categoryInput) { categoryInput.value=d.category; categoryInput.dispatchEvent(new Event("change",{bubbles:true})); }
-      if (tagsInput) { tagsInput.value=d.tags.join(", "); tagsInput.dispatchEvent(new Event("input",{bubbles:true})); }
-      if (memoInput) { memoInput.value=d.memo; memoInput.dispatchEvent(new Event("input",{bubbles:true})); }
-      window.scrollTo({top:0,behavior:"smooth"});
-      return;
-    }
-
-    // Fallback: dispatch a custom event that an existing form can listen for.
-    window.dispatchEvent(new CustomEvent("mysites:register-from-chatgpt", {detail:d}));
-    alert("ChatGPTからの登録データを受け取りました。登録フォームが見つからないため、画面の登録欄をご確認ください。");
-  }
-
-  function readIncoming() {
-    const p = new URLSearchParams(location.search);
-    const add = p.get("add");
+  function getIncoming() {
+    const add = qs.get("add");
     if (add) return decodeAdd(add);
-
-    const url = p.get("url");
-    if (url) return {
-      url,
-      title: p.get("title") || "",
-      text: p.get("text") || ""
-    };
+    const url = qs.get("url");
+    if (url) {
+      return {
+        url: url,
+        name: qs.get("title") || "",
+        description: qs.get("text") || "",
+        category: qs.get("category") || "その他",
+        tags: qs.get("tags") ? qs.get("tags").split(",").map(s => s.trim()).filter(Boolean) : [],
+        memo: qs.get("memo") || ""
+      };
+    }
     return null;
   }
 
-  async function init() {
-    const incoming = readIncoming();
-    if (incoming) {
-      // Give the app a moment to render its registration UI.
-      setTimeout(() => openRegistration(incoming), 250);
-    }
+  function normalize(x) {
+    x = x || {};
+    return {
+      url: String(x.url || x.href || "").trim(),
+      name: String(x.name || x.title || x.siteName || "").trim(),
+      description: String(x.description || x.desc || x.text || "").trim(),
+      category: String(x.category || "その他").trim(),
+      tags: Array.isArray(x.tags) ? x.tags.map(String) : [],
+      memo: String(x.memo || "").trim()
+    };
+  }
 
-    const btn = document.getElementById("chatgptRegisterBtn");
-    if (btn) {
-      btn.addEventListener("click", () => {
-        const p = new URLSearchParams(location.search);
-        const incoming = p.get("add") ? decodeAdd(p.get("add")) : (p.get("url") ? {
-          url:p.get("url"), title:p.get("title")||"", text:p.get("text")||""
-        } : null);
-        if (incoming) openRegistration(incoming);
-        else alert("ChatGPTから受け取った登録データがありません。");
-      });
+  function savePending(data) {
+    try {
+      localStorage.setItem(PENDING_KEY, JSON.stringify({
+        ...normalize(data),
+        receivedAt: new Date().toISOString()
+      }));
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
+  function readPending() {
+    try {
+      const s = localStorage.getItem(PENDING_KEY);
+      return s ? JSON.parse(s) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearPending() {
+    try { localStorage.removeItem(PENDING_KEY); } catch (e) {}
+  }
+
+  function fire(data) {
+    window.dispatchEvent(new CustomEvent("mysites:register-from-chatgpt", {
+      detail: normalize(data)
+    }));
+  }
+
+  function fillKnownForm(data) {
+    const d = normalize(data);
+    const selectors = {
+      url: 'input[name="url"], #url, #siteUrl',
+      name: 'input[name="name"], #name, #siteName, input[name="title"]',
+      description: 'textarea[name="description"], textarea[name="desc"], #description, #siteDescription',
+      category: 'select[name="category"], #category, select[name="siteCategory"]',
+      tags: 'input[name="tags"], #tags, input[name="siteTags"]',
+      memo: 'textarea[name="memo"], #memo'
+    };
+    const el = {};
+    for (const k in selectors) el[k] = document.querySelector(selectors[k]);
+
+    if (!el.url) return false;
+
+    el.url.value = d.url;
+    el.url.dispatchEvent(new Event("input", {bubbles:true}));
+    if (el.name) { el.name.value=d.name || d.url; el.name.dispatchEvent(new Event("input",{bubbles:true})); }
+    if (el.description) { el.description.value=d.description; el.description.dispatchEvent(new Event("input",{bubbles:true})); }
+    if (el.category) { el.category.value=d.category; el.category.dispatchEvent(new Event("change",{bubbles:true})); }
+    if (el.tags) { el.tags.value=d.tags.join(", "); el.tags.dispatchEvent(new Event("input",{bubbles:true})); }
+    if (el.memo) { el.memo.value=d.memo; el.memo.dispatchEvent(new Event("input",{bubbles:true})); }
+    window.scrollTo({top:0, behavior:"smooth"});
+    return true;
+  }
+
+  function present(data) {
+    if (!data || !data.url) return;
+    savePending(data);
+
+    // Existing app code may handle this event and open its own form.
+    fire(data);
+
+    // Also try to fill a conventional form. Repeat because the app may render asynchronously.
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries++;
+      if (fillKnownForm(data) || tries >= 12) clearInterval(timer);
+    }, 150);
+  }
+
+  function boot() {
+    const incoming = getIncoming();
+    if (incoming && incoming.url) {
+      present(incoming);
+      return;
+    }
+    const pending = readPending();
+    if (pending && pending.url) {
+      // Only keep the pending record until the app has had a chance to receive it.
+      setTimeout(() => {
+        fire(pending);
+        fillKnownForm(pending);
+      }, 250);
+    }
+  }
+
+  // Public helper for future ChatGPT registration links.
+  window.MySitesChatGPT = {
+    receiveRegistration: present,
+    getPendingRegistration: readPending,
+    clearPendingRegistration: clearPending
+  };
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", boot);
   } else {
-    init();
+    boot();
   }
 })();
