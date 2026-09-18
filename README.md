@@ -1,4 +1,4 @@
-# My Sites v0.8
+# My Sites v1.4
 
 v0.3をベースに、Safariなどの共有メニューからURLを受け取って登録画面へ渡す仕組み（Web Share Target）を追加しました。
 
@@ -62,5 +62,17 @@ ChatGPTからの登録依頼を「受信箱」として保持し、My Sites側�
 iOSではSafariとホーム画面PWAのストレージが分離される場合があるため、ChatGPTから受信した情報はMy Sites側で開いたコンテキストに引き渡して確認・保存する設計です。
 
 
-## v1.3
+## v1.4
 ChatGPTから「登録コード」をコピーし、ホーム画面のMy Sites自身でコードを貼り付けてIndexedDBへ保存する方式を追加しました。Safariとホーム画面PWAのストレージ分離の影響を受けにくい設計です。
+
+
+## v1.4
+ChatGPTからMy Sitesへの登録コードを平文JSONで受け取れるようにしました。iOSでのBase64/UTF-8コピー問題を避けるため、今後はMYSITES1:の後ろにJSONをそのまま貼り付ける形式を推奨します。旧Base64URL形式と従来の登録リンクも引き続き読み込めます。
+
+
+## v1.4 追加・変更
+- 「ChatGPTから登録」で、URL-safe Base64だけでなく平文JSONをそのまま貼り付けて登録できます。
+- `MYSITES1:` + JSON 形式にも対応しています。
+- 旧バージョンのBase64形式も引き続き読み込めます。
+- ChatGPTから登録する際の処理は、インストール済みPWA側でIndexedDBへ保存します。
+- Service Workerのキャッシュ名をv1.4へ更新し、古いキャッシュを削除して新しいファイルを有効化します。

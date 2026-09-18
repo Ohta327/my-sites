@@ -9,14 +9,14 @@
 <title>My Sites</title>
 </head>
 <body>
-<header><div><h1>My Sites</h1><p>便利サイト図鑑 v1.3</p></div><button id="addTop" class="primary">＋ 登録</button></header>
+<header><div><h1>My Sites</h1><p>便利サイト図鑑 v1.4</p></div><button id="addTop" class="primary">＋ 登録</button></header>
 <main>
   <input id="search" type="search" placeholder="サイト名・URL・タグ・メモを検索">
   <select id="categoryFilter"><option value="">すべてのカテゴリ</option><option>AI / 生成AI</option><option>画像</option><option>動画</option><option>音楽</option><option>学習</option><option>ニュース</option><option>開発</option><option>ツール</option><option>その他</option></select>
   <nav><button data-filter="all" class="active">すべて</button><button data-filter="favorite">★ お気に入り</button><button data-filter="later">あとで試す</button><button data-filter="recent">最近追加</button></nav>
   <p id="stats"></p><section id="list"></section>
   <aside>
-    <div class="card" style="margin-top:12px"><strong>🤖 ChatGPT連携</strong><p>ChatGPTからの登録リンク、Safariの共有からのサイト追加に対応しています。</p></div>
+    <div class="card" style="margin-top:12px"><strong>🤖 ChatGPT連携</strong><p>ChatGPTからの登録コード、Safariの共有からのサイト追加に対応しています。</p></div>
     <button id="shareChanged">↗ ChatGPTに変更分を共有</button>
     <button id="shareAll">↗ ChatGPTに全データを共有</button>
     <button id="copyAll">📋 ChatGPT用データをコピー</button>
@@ -33,7 +33,7 @@
 <section class="chatgpt-register-panel" style="margin-top:16px;">
   <button id="chatgptPasteBtn" type="button">🤖 ChatGPTから登録</button>
   <p style="margin:6px 0 0;font-size:13px;opacity:.8;">
-    ChatGPTが作った「登録コード」をここに貼り付けて、ホーム画面のMy Sitesへ直接登録できます。
+    ChatGPTが作った「登録コード」を貼り付けて、ホーム画面のMy Sitesへ直接登録できます。
   </p>
 </section>
 </main>

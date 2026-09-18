@@ -70,41 +70,56 @@ async function copySearchPrompt(){
 $('copyPrompt').onclick=copySearchPrompt;
 
 
-/* v1.3: reliable PWA-side ChatGPT registration code import.
-   The important rule: the installed PWA itself performs the IndexedDB write.
-   This avoids relying on Safari storage being the same as the Home Screen PWA. */
+/* v1.4: robust PWA-side ChatGPT registration import.
+   Accepts plain JSON (recommended), MYSITES1: + plain JSON,
+   and the legacy base64url formats. Plain JSON avoids UTF-8/base64
+   copy/paste problems on iOS. The installed PWA itself performs the
+   IndexedDB write, so Safari and Home Screen storage do not need to match. */
 function decodeRegistrationCode(raw){
   raw=String(raw||'').trim();
-  // Accept either raw base64url or a full URL containing ?add= / ?pwaAdd=.
-  try{
-    if(/^https?:\/\//i.test(raw)){
-      const u=new URL(raw);
-      raw=u.searchParams.get('pwaAdd')||u.searchParams.get('add')||'';
-    }
-  }catch{}
   if(!raw)throw new Error('コードが空です');
-  raw=raw.replace(/^MYSITES1:/,'').trim();
-  let s=raw.replace(/-/g,'+').replace(/_/g,'/');
-  while(s.length%4)s+='=';
-  const bin=atob(s);
-  const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
-  const data=JSON.parse(new TextDecoder().decode(bytes));
-  if(!data?.url || !data?.name)throw new Error('URLまたはサイト名がありません');
-  return data;
+
+  // Accept a full URL containing ?add= / ?pwaAdd=.
+  if(/^https?:\/\//i.test(raw)){
+    try{
+      const u=new URL(raw);
+      raw=u.searchParams.get('pwaAdd')||u.searchParams.get('add')||raw;
+    }catch{}
+  }
+
+  if(raw.startsWith('MYSITES1:')) raw=raw.slice('MYSITES1:'.length).trim();
+
+  // v1.4 recommended format: plain JSON.
+  try{
+    const data=JSON.parse(raw);
+    if(data?.url && data?.name)return data;
+  }catch{}
+
+  // Legacy format: URL-safe base64 encoded UTF-8 JSON.
+  try{
+    let s=raw.replace(/-/g,'+').replace(/_/g,'/').replace(/\s+/g,'');
+    while(s.length%4)s+='=';
+    const bin=atob(s);
+    const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+    const data=JSON.parse(new TextDecoder().decode(bytes));
+    if(data?.url && data?.name)return data;
+  }catch{}
+
+  throw new Error('登録コードの形式が正しくありません');
 }
 async function importChatGPTCode(){
   const raw=$('chatgptPasteInput').value.trim();
   try{
     const incoming=decodeRegistrationCode(raw);
-    const url=new URL(incoming.url).href.replace(/\/$/,'');
+    const url=new URL(String(incoming.url).trim()).href.replace(/\/$/,'');
     const duplicate=sites.find(s=>s.url===url);
     const msg=(duplicate?'このサイトはすでに登録されています。情報を更新しますか？':'このサイトをMy Sitesに登録しますか？')+
-      `\n\nサイト名: ${incoming.name}\nURL: ${url}\nカテゴリ: ${incoming.category||'その他'}`;
+      `\n\nサイト名: ${String(incoming.name).trim()}\nURL: ${url}\nカテゴリ: ${incoming.category||'その他'}`;
     if(!confirm(msg))return;
     const old=duplicate,stamp=now();
     await put({
-      id:old?.id||uid(),url,name:String(incoming.name).trim(),description:incoming.description||'',
-      category:incoming.category||'その他',tags:Array.isArray(incoming.tags)?incoming.tags:[],memo:incoming.memo||'',
+      id:old?.id||uid(),url,name:String(incoming.name).trim(),description:String(incoming.description||''),
+      category:incoming.category||'その他',tags:Array.isArray(incoming.tags)?incoming.tags.map(String):[],memo:String(incoming.memo||''),
       favorite:!!incoming.favorite,later:!!incoming.later,icon:incoming.icon||fav(url),
       createdAt:old?.createdAt||stamp,updatedAt:stamp,lastUsedAt:old?.lastUsedAt||null
     });
@@ -114,7 +129,7 @@ async function importChatGPTCode(){
     alert(old?'サイト情報を更新しました。':'サイトを登録しました。');
   }catch(e){
     console.error(e);
-    alert('登録コードを読み込めませんでした。ChatGPTからコードをもう一度コピーしてください。');
+    alert('登録コードを読み込めませんでした。\n\nv1.4ではJSON形式のコードにも対応しています。ChatGPTから受け取ったコードをそのまま貼り付けてください。');
   }
 }
 $('chatgptPasteBtn').onclick=()=>{$('chatgptPasteModal').classList.remove('hidden');$('chatgptPasteInput').focus()};
@@ -123,6 +138,7 @@ $('chatgptPasteSave').onclick=importChatGPTCode;
 
 $('importFile').onchange=async e=>{try{let d=JSON.parse(await e.target.files[0].text());for(let s of d.sites||[])if(s.id&&s.url&&s.name)await put(s);await refresh()}catch{alert('JSONの読み込みに失敗しました。')}};
 
+// v1.4: ChatGPT登録コードは平文JSONを推奨。
 // v0.8: ChatGPT検索用プロンプトを追加。
 // v0.7: ChatGPT連携を強化。共有ファイルに加えて、ChatGPTへ貼り付けるデータをクリップボードへコピー可能。
 // v0.5: ChatGPT → My Sites registration link.
