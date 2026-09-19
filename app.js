@@ -36,6 +36,50 @@ $('addTop').onclick=()=>editSite();$('close').onclick=$('cancel').onclick=()=>{$
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render()});
 $('delete').onclick=async()=>{let id=$('id').value;if(id&&confirm('このサイトを削除しますか？')){await remove(id);$('modal').classList.add('hidden');await refresh()}};
 $('form').onsubmit=async e=>{e.preventDefault();let id=$('id').value||uid(),old=sites.find(s=>s.id===id),url=$('url').value.trim();try{url=new URL(url).href.replace(/\/$/,'')}catch{}if(sites.some(s=>s.id!==id&&s.url===url)){alert('同じURLのサイトがすでに登録されています。');return}await put({id,url,name:$('name').value.trim(),description:$('desc').value.trim(),category:$('cat').value,tags:parseTags($('tags').value),memo:$('memo').value.trim(),favorite:$('fav').checked,later:$('later').checked,icon:fav(url),createdAt:old?.createdAt||now(),updatedAt:now(),lastUsedAt:old?.lastUsedAt||null});$('modal').classList.add('hidden');await refresh()};
+async function syncExport(){
+  const payload={schemaVersion:1,exportedAt:now(),source:'My Sites v1.5',mode:'sync',sites};
+  const text=JSON.stringify(payload,null,2);
+  try{
+    await navigator.clipboard.writeText(text);
+    alert(`${sites.length}件の同期データをコピーしました。\n\nもう一方のMy Sitesを開き、「別のMy Sitesから同期」へ貼り付けてください。`);
+  }catch(e){
+    const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');alert(`${sites.length}件の同期データをコピーしました。\n\nもう一方のMy Sitesへ貼り付けてください。`)}catch{alert('コピーできませんでした。Safariのコピー許可を確認してください。')}
+    ta.remove();
+  }
+}
+function syncMergeData(raw){
+  raw=String(raw||'').trim();
+  if(!raw)throw new Error('空です');
+  const d=JSON.parse(raw);
+  if(!Array.isArray(d?.sites))throw new Error('同期データではありません');
+  return d.sites.filter(s=>s&&s.url&&s.name);
+}
+async function syncImport(){
+  const raw=$('syncInput').value.trim();
+  try{
+    const incoming=syncMergeData(raw);
+    let added=0,updated=0;
+    for(const x of incoming){
+      let url=new URL(String(x.url).trim()).href.replace(/\/$/,'');
+      const old=sites.find(s=>s.url===url);
+      const merged={
+        id:old?.id||x.id||uid(),url,name:String(x.name).trim(),description:String(x.description||''),
+        category:x.category||'その他',tags:Array.isArray(x.tags)?x.tags.map(String):[],memo:String(x.memo||''),
+        favorite:!!x.favorite,later:!!x.later,icon:x.icon||fav(url),
+        createdAt:old?.createdAt||x.createdAt||now(),updatedAt:x.updatedAt||now(),lastUsedAt:old?.lastUsedAt||x.lastUsedAt||null
+      };
+      await put(merged); old?updated++:added++;
+    }
+    $('syncModal').classList.add('hidden');$('syncInput').value='';await refresh();
+    alert(`同期しました。\n\n新規追加: ${added}件\n更新: ${updated}件`);
+  }catch(e){alert('同期データを読み込めませんでした。\n\n「別のMy Sitesへ同期データをコピー」で作成したJSONをそのまま貼り付けてください。')}
+}
+$('syncExport').onclick=syncExport;
+$('syncImport').onclick=()=>{$('syncModal').classList.remove('hidden');$('syncInput').value='';$('syncInput').focus()};
+$('syncClose').onclick=$('syncCancel').onclick=()=>{$('syncModal').classList.add('hidden')};
+$('syncSave').onclick=syncImport;
+
 async function share(mode){let last=mode==='changed'?await getMeta('lastSyncedAt'):null,l=mode==='changed'&&last?sites.filter(s=>s.updatedAt>last):sites,p={schemaVersion:1,exportedAt:now(),mode,sites:l},b=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),name=`my-sites-${mode}-${new Date().toISOString().slice(0,10)}.json`,shared=false;try{let f=new File([b],name,{type:'application/json'});if(navigator.share&&navigator.canShare?.({files:[f]})){await navigator.share({title:'My Sites',text:'My Sitesのサイトデータ',files:[f]});shared=true}}catch{}if(!shared){let a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);alert('JSONを保存しました。ChatGPTのチャットにこのファイルを添付してください。')}await setMeta('lastSyncedAt',now())}
 $('shareChanged').onclick=()=>share('changed');$('shareAll').onclick=()=>share('all');
 async function copyForChatGPT(mode='all'){
@@ -70,7 +114,7 @@ async function copySearchPrompt(){
 $('copyPrompt').onclick=copySearchPrompt;
 
 
-/* v1.4: robust PWA-side ChatGPT registration import.
+/* v1.5: robust PWA-side ChatGPT registration import.
    Accepts plain JSON (recommended), MYSITES1: + plain JSON,
    and the legacy base64url formats. Plain JSON avoids UTF-8/base64
    copy/paste problems on iOS. The installed PWA itself performs the

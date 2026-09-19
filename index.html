@@ -9,14 +9,17 @@
 <title>My Sites</title>
 </head>
 <body>
-<header><div><h1>My Sites</h1><p>便利サイト図鑑 v1.4</p></div><button id="addTop" class="primary">＋ 登録</button></header>
+<header><div><h1>My Sites</h1><p>便利サイト図鑑 v1.5</p></div><button id="addTop" class="primary">＋ 登録</button></header>
 <main>
   <input id="search" type="search" placeholder="サイト名・URL・タグ・メモを検索">
   <select id="categoryFilter"><option value="">すべてのカテゴリ</option><option>AI / 生成AI</option><option>画像</option><option>動画</option><option>音楽</option><option>学習</option><option>ニュース</option><option>開発</option><option>ツール</option><option>その他</option></select>
   <nav><button data-filter="all" class="active">すべて</button><button data-filter="favorite">★ お気に入り</button><button data-filter="later">あとで試す</button><button data-filter="recent">最近追加</button></nav>
   <p id="stats"></p><section id="list"></section>
   <aside>
+    <div class="card" style="margin-top:12px"><strong>🔄 My Sites同期</strong><p>ホーム画面版とSafari版は保存領域が分かれることがあります。同期データをコピーして、もう一方のMy Sitesへ取り込めます。</p></div>
     <div class="card" style="margin-top:12px"><strong>🤖 ChatGPT連携</strong><p>ChatGPTからの登録コード、Safariの共有からのサイト追加に対応しています。</p></div>
+    <button id="syncExport">🔄 別のMy Sitesへ同期データをコピー</button>
+    <button id="syncImport">📥 別のMy Sitesから同期</button>
     <button id="shareChanged">↗ ChatGPTに変更分を共有</button>
     <button id="shareAll">↗ ChatGPTに全データを共有</button>
     <button id="copyAll">📋 ChatGPT用データをコピー</button>
@@ -51,6 +54,13 @@
     <div><label><input id="fav" type="checkbox"> ★ お気に入り</label><label><input id="later" type="checkbox"> あとで試す</label></div>
     <footer><button type="button" id="delete" class="danger hidden">削除</button><span></span><button type="button" id="cancel">キャンセル</button><button class="primary">保存</button></footer>
   </form>
+</div></div>
+
+<div id="syncModal" class="hidden"><div class="box">
+  <div class="head"><h2>📥 My Sitesから同期</h2><button id="syncClose" type="button">×</button></div>
+  <p>もう一方のMy Sitesで「同期データをコピー」して、ここへ貼り付けてください。</p>
+  <textarea id="syncInput" rows="8" placeholder="同期データを貼り付け"></textarea>
+  <footer><span></span><button id="syncCancel" type="button">キャンセル</button><button id="syncSave" class="primary" type="button">同期する</button></footer>
 </div></div>
 
 <div id="chatgptPasteModal" class="hidden"><div class="box">
