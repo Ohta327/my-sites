@@ -215,6 +215,24 @@ async function receiveChatGPTAdd(){
     alert(old?'サイト情報を更新しました。':'サイトを登録しました。');
   }catch(e){console.error(e);alert('ChatGPTから受け取った登録データを読み込めませんでした。');}
 }
+
+// Dark mode
+const THEME_KEY = 'my-sites-theme';
+function applyTheme(theme){
+  document.body.classList.toggle('dark', theme === 'dark');
+  const btn = $('themeToggle');
+  if(btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', theme === 'dark' ? '#080a0e' : '#111318');
+}
+const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
+applyTheme(savedTheme);
+$('themeToggle').onclick = () => {
+  const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+};
+
 openDB().then(async()=>{await refresh();receiveShare();await receiveChatGPTAdd()})
 .catch(e=>{console.error(e);alert('このブラウザではデータ保存機能を利用できません。Safariの通常モードで開いているか確認してください。');});
 
